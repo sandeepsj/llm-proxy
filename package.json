@@ -10,8 +10,9 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/node": "^25.5.2",
+    "@types/node": "^20.19.39",
     "@vercel/node": "^5.7.0",
-    "typescript": "^6.0.2"
+    "typescript": "^5.9.3",
+    "vercel": "^50.40.0"
   }
 }

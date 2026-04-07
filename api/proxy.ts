@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { Readable } from "node:stream";
 import { authenticate } from "../lib/auth";
 import { getProvider } from "../lib/providers";
 
@@ -67,8 +66,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.setHeader("Connection", "keep-alive");
       res.status(upstream.status);
 
-      const nodeStream = Readable.fromWeb(upstream.body as any);
-      nodeStream.pipe(res);
+      const reader = (upstream.body as any).getReader();
+      const decoder = new TextDecoder();
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(decoder.decode(value, { stream: true }));
+        }
+      } finally {
+        res.end();
+      }
       return;
     }
 
@@ -77,15 +86,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.setHeader("Content-Type", contentType);
     res.status(upstream.status);
 
-    // Handle binary responses (e.g., audio, images)
-    if (!contentType.includes("application/json") && !contentType.includes("text/")) {
-      const buffer = Buffer.from(await upstream.arrayBuffer());
-      return res.send(buffer);
-    }
-
-    const data = await upstream.text();
-    return res.end(data);
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    return res.end(buffer);
   } catch (err: unknown) {
+    console.error("Proxy error:", err);
     const message = err instanceof Error ? err.message : "Internal server error";
     const status =
       message.includes("Invalid Google") || message.includes("Missing Auth") || message.includes("Unsupported auth") || message.includes("not verified")
