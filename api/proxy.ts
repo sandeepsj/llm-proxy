@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { Readable } from "node:stream";
 import { authenticate } from "../lib/auth";
 import { getProvider } from "../lib/providers";
 
@@ -64,24 +65,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache");
       res.setHeader("Connection", "keep-alive");
+      res.status(upstream.status);
 
-      const reader = upstream.body.getReader();
-      const decoder = new TextDecoder();
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          res.write(chunk);
-        }
-      } finally {
-        res.end();
-      }
+      const nodeStream = Readable.fromWeb(upstream.body as any);
+      nodeStream.pipe(res);
       return;
     }
 
-    // 8. Non-streaming: forward the JSON response
+    // 8. Non-streaming: forward the response
     const contentType = upstream.headers.get("content-type") ?? "application/json";
     res.setHeader("Content-Type", contentType);
     res.status(upstream.status);
@@ -92,8 +83,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.send(buffer);
     }
 
-    const data = await upstream.json();
-    return res.json(data);
+    const data = await upstream.text();
+    return res.end(data);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal server error";
     const status =
